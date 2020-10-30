@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 from PIL import Image
 import torchvision.transforms as transforms
 import atexit
-
+from PIL import ImageFile
 
 app = Flask(__name__)
 
@@ -19,11 +19,10 @@ def exit_handler():
         if (file.endswith('.png') or file.endswith('.jpg') or file.endswith('.jpeg')):
             os.remove(file)
             os.remove('static/'+file)
-
+            
 atexit.register(exit_handler)
 
 face_cascade = cv2.CascadeClassifier('haarcascades/haarcascade_frontalface_alt.xml')
-
 
 def face_detector(img_path):
     img = cv2.imread(img_path)
@@ -31,38 +30,28 @@ def face_detector(img_path):
     faces = face_cascade.detectMultiScale(gray)
     return len(faces) > 0
 
-
 VGG16 = models.vgg16(pretrained=True)
 use_cuda = torch.cuda.is_available()
 if use_cuda:
     VGG16 = VGG16.cuda()
 
-
-from PIL import ImageFile
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 def VGG16_predict(img_path):
     image = Image.open(img_path)
-
     transform = transforms.Compose([transforms.Resize(224),
                                     transforms.CenterCrop(224), 
                                     transforms.ToTensor(),
                                     transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                               std=[0.229, 0.224, 0.225])])
-    
     image = transform(image)
-    
     image = image.unsqueeze(0)
-    
     if use_cuda:
         image = image.cuda()
-   
     pred = VGG16(image)
     pred = torch.argmax(pred)
     pred = pred.item() 
-
     return int(pred)
-
 
 def dog_detector(img_path):
     pred = VGG16_predict(img_path)
@@ -72,7 +61,6 @@ def dog_detector(img_path):
         result = False
         
     return result
-
 
 class_names = ['Affenpinscher', 
                'Afghan hound', 
@@ -206,20 +194,14 @@ class_names = ['Affenpinscher',
                 'Xoloitzcuintli', 
                 'Yorkshire terrier']
 
-
 model_transfer = models.vgg16(pretrained=True)
-
 for param in model_transfer.features.parameters():
     param.requires_grad = False
-
 last_layer = nn.Linear(model_transfer.classifier[6].in_features,
                        133, bias=True)
-
 model_transfer.classifier[6] = last_layer
-
 if use_cuda:
     model_transfer = model_transfer.cuda()
-
 model_transfer.load_state_dict(torch.load('model_transfer.pt', map_location=torch.device('cpu')))
 
 def predict_breed_transfer(img_path):
@@ -229,20 +211,14 @@ def predict_breed_transfer(img_path):
                                     transforms.ToTensor(),
                                     transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                               std=[0.229, 0.224, 0.225])])
-
     image = transform(image)
-    
     image = image.unsqueeze(0)
-    
     if use_cuda:
         image = image.cuda()
-
     pred = model_transfer(image)
     pred = torch.argmax(pred)
     pred = pred.item() 
-
     return class_names[pred]
-
 
 def show_image(img_path):
     img = Image.open(img_path)
@@ -251,17 +227,11 @@ def show_image(img_path):
     
 def run_app(img_path):
     if face_detector(img_path):
-        
         predicted_breed = predict_breed_transfer(img_path)
-        
         return ["Human!", img_path, "You look like a: "+ predicted_breed + "!\n"]
-
     elif dog_detector(img_path):
-       
         predicted_breed = predict_breed_transfer(img_path)
-        
         return ["Dog!", img_path, "You look like a: "+ predicted_breed + "!\n"]
-       
     else:
         return ["Not a human or a dog!", img_path, " "]
 
@@ -273,7 +243,6 @@ def index():
 @app.route('/classification_from_location', methods=['POST'])
 def classification_from_location():
     return render_template('classification.html', classification = run_app(request.form['projectFilePath']))
-
 
 @app.route('/classification_from_file', methods=['POST'])
 def classification_from_file():
